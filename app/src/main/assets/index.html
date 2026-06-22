@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0A1F">
+<title>Шашки с Ромашкой</title>
+<style>
+  :root{
+    --bg:#0B0A1F;
+    --p1:#FF2E88;        /* розовый игрок */
+    --p1-deep:#7A0B3C;
+    --p2:#00E5D4;        /* бирюзовый игрок */
+    --p2-deep:#064F49;
+    --lime:#C6FF3D;
+    --ink:#0B0A1F;
+    --card:#15132E;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0}
+  html,body{height:100%; overflow:hidden; background:var(--bg);
+    font-family:"SF Pro Display",-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+    color:#fff; user-select:none; -webkit-user-select:none;}
+  #app{position:fixed; inset:0; display:flex; touch-action:manipulation;}
+
+  /* ---- половины игроков ---- */
+  .side{flex:1; position:relative; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; transition:filter .25s, background .25s;
+    overflow:hidden;}
+  .side.p1{background:radial-gradient(120% 90% at 50% 50%, rgba(255,46,136,.18), transparent 70%);}
+  .side.p2{background:radial-gradient(120% 90% at 50% 50%, rgba(0,229,212,.16), transparent 70%);}
+  .side.inactive{filter:saturate(.35) brightness(.5);}
+  .side.active.p1{box-shadow:inset 0 0 140px rgba(255,46,136,.45);}
+  .side.active.p2{box-shadow:inset 0 0 140px rgba(0,229,212,.40);}
+  .side.active::before{content:""; position:absolute; inset:0; pointer-events:none;
+    border:3px solid currentColor; opacity:.0; animation:breathe 2.6s ease-in-out infinite;}
+  .side.p1{color:var(--p1)} .side.p2{color:var(--p2)}
+  @keyframes breathe{0%,100%{opacity:.12} 50%{opacity:.55}}
+  .side.pressed{transform:scale(.99)}
+
+  .pname{font-size:clamp(13px,3.6vmin,22px); font-weight:600; letter-spacing:.18em;
+    text-transform:uppercase; opacity:.85;}
+  .p1 .pname{color:var(--p1)} .p2 .pname{color:var(--p2)}
+  .time{font-variant-numeric:tabular-nums; font-weight:800;
+    font-size:clamp(54px,17vmin,150px); line-height:1; letter-spacing:.01em;
+    text-shadow:0 0 32px currentColor;}
+  .p1 .time{color:#fff; text-shadow:0 0 38px var(--p1)}
+  .p2 .time{color:#fff; text-shadow:0 0 38px var(--p2)}
+  .hint{position:absolute; bottom:5%; font-size:clamp(11px,2.4vmin,16px);
+    opacity:.7; font-weight:500;}
+  .turnflag{margin-top:10px; font-size:clamp(11px,2.4vmin,15px); font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase; opacity:0; transition:opacity .2s;}
+  .side.active .turnflag{opacity:.9}
+
+  /* ---- центральная панель управления ---- */
+  #center{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    display:flex; flex-direction:column; gap:12px; align-items:center; z-index:30;}
+  .ctl{width:clamp(48px,9vmin,66px); height:clamp(48px,9vmin,66px); border-radius:50%;
+    border:1.5px solid rgba(255,255,255,.22); background:rgba(20,18,46,.78);
+    backdrop-filter:blur(8px); color:#fff; font-size:clamp(20px,4.6vmin,28px);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:transform .12s, background .2s;}
+  .ctl:active{transform:scale(.9)}
+  .ctl.primary{background:var(--lime); color:var(--ink); border-color:var(--lime);
+    box-shadow:0 0 26px rgba(198,255,61,.5); font-weight:800;}
+
+  /* ---- старт-оверлей ---- */
+  .overlay{position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; text-align:center; padding:24px;
+    background:radial-gradient(140% 100% at 50% 30%, #1b1840, var(--bg) 75%);}
+  .wordmark{font-size:clamp(34px,9vmin,72px); font-weight:900; letter-spacing:.02em;
+    background:linear-gradient(92deg,var(--p1),var(--lime),var(--p2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 48px rgba(255,46,136,.25);}
+  .sub{font-size:clamp(13px,3vmin,19px); opacity:.8; font-weight:500; max-width:30ch;}
+  .bigbtn{margin-top:6px; padding:18px 54px; border-radius:999px; border:none;
+    font-size:clamp(20px,5vmin,30px); font-weight:900; letter-spacing:.06em;
+    background:var(--lime); color:var(--ink); cursor:pointer;
+    box-shadow:0 0 40px rgba(198,255,61,.55); transition:transform .12s;}
+  .bigbtn:active{transform:scale(.95)}
+  .note{font-size:clamp(11px,2.6vmin,15px); opacity:.6;}
+  .note b.p1c{color:var(--p1)} .note b.p2c{color:var(--p2)}
+  .hidden{display:none !important}
+
+  /* ---- попап задания ---- */
+  #taskWrap{position:fixed; inset:0; z-index:50; display:flex; align-items:center;
+    justify-content:center; pointer-events:none;}
+  #taskWrap .dim{position:absolute; inset:0; background:rgba(5,4,15,.45);}
+  .taskcard{position:relative; pointer-events:auto; width:min(86vw,520px);
+    background:var(--card); border-radius:28px; padding:26px 24px 22px;
+    border:2px solid var(--lime); box-shadow:0 0 60px rgba(198,255,61,.35);
+    text-align:center; animation:pop .42s cubic-bezier(.2,1.5,.4,1);}
+  @keyframes pop{0%{transform:scale(.6); opacity:0} 100%{transform:scale(1); opacity:1}}
+  .taskcard.forP1{border-color:var(--p1); box-shadow:0 0 60px rgba(255,46,136,.4)}
+  .taskcard.forP2{border-color:var(--p2); box-shadow:0 0 60px rgba(0,229,212,.4)}
+  .taskemoji{font-size:clamp(44px,11vmin,76px); line-height:1; margin-bottom:6px;}
+  .taskfor{font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+    opacity:.7; margin-bottom:6px;}
+  .forP1 .taskfor{color:var(--p1)} .forP2 .taskfor{color:var(--p2)}
+  .tasktext{font-size:clamp(20px,5vmin,30px); font-weight:800; line-height:1.2; margin-bottom:20px;}
+  .taskbtns{display:flex; gap:12px; justify-content:center;}
+  .taskbtns button{flex:1; max-width:200px; padding:14px 10px; border-radius:16px;
+    font-size:clamp(15px,3.6vmin,19px); font-weight:800; cursor:pointer; border:none;}
+  .btn-done{background:var(--lime); color:var(--ink)}
+  .btn-skip{background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,.3) !important;}
+
+  /* ---- настройки ---- */
+  #settings{position:fixed; inset:0; z-index:70; background:rgba(7,6,20,.92);
+    backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:14px; padding:24px;}
+  .panel{width:min(92vw,440px); background:var(--card); border-radius:24px; padding:22px;
+    border:1px solid rgba(255,255,255,.12);}
+  .panel h2{font-size:22px; margin-bottom:14px; font-weight:800;}
+  .row{display:flex; align-items:center; justify-content:space-between; padding:13px 0;
+    border-bottom:1px solid rgba(255,255,255,.08); gap:14px;}
+  .row:last-child{border-bottom:none}
+  .row .lbl{font-size:16px; font-weight:600}
+  .row .desc{font-size:12px; opacity:.55; margin-top:2px}
+  /* свитч */
+  .sw{width:54px; height:30px; border-radius:999px; background:rgba(255,255,255,.18);
+    position:relative; cursor:pointer; flex:none; transition:background .2s;}
+  .sw.on{background:var(--lime)}
+  .sw i{position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%;
+    background:#fff; transition:left .2s;}
+  .sw.on i{left:27px}
+  .seg{display:flex; gap:6px; flex:none}
+  .seg button{padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.2);
+    background:transparent; color:#fff; font-size:13px; font-weight:700; cursor:pointer}
+  .seg button.sel{background:var(--lime); color:var(--ink); border-color:var(--lime)}
+  .closebtn{padding:14px 40px; border-radius:999px; border:none; background:var(--lime);
+    color:var(--ink); font-size:18px; font-weight:800; cursor:pointer}
+
+  .rotateHint{position:fixed; inset:0; z-index:80; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; background:var(--bg); text-align:center;
+    font-size:18px; padding:30px;}
+  @media (orientation:portrait){ .rotateHint{display:flex} }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="side p1" id="side1" data-p="1">
+    <div class="pname">Игрок 1</div>
+    <div class="time" id="t1">00:00</div>
+    <div class="turnflag">▶ твой ход</div>
+    <div class="hint" id="h1"></div>
+  </div>
+  <div class="side p2" id="side2" data-p="2">
+    <div class="pname">Игрок 2</div>
+    <div class="time" id="t2">00:00</div>
+    <div class="turnflag">твой ход ◀</div>
+    <div class="hint" id="h2"></div>
+  </div>
+
+  <div id="center">
+    <div class="ctl primary" id="btnPlay" aria-label="Старт / пауза">▶</div>
+    <div class="ctl" id="btnReset" aria-label="Сброс">⟲</div>
+    <div class="ctl" id="btnGear" aria-label="Настройки">⚙</div>
+  </div>
+</div>
+
+<!-- задание -->
+<div id="taskWrap" class="hidden">
+  <div class="dim"></div>
+  <div class="taskcard" id="taskCard">
+    <div class="taskemoji" id="taskEmoji">🍺</div>
+    <div class="taskfor" id="taskFor">Задание для Игрока 1</div>
+    <div class="tasktext" id="taskText">Выпей глоток пива</div>
+    <div class="taskbtns">
+      <button class="btn-done" id="taskDone">Готово</button>
+      <button class="btn-skip" id="taskSkip">Пропустить</button>
+    </div>
+  </div>
+</div>
+
+<!-- старт -->
+<div class="overlay" id="startOverlay">
+  <div class="wordmark">Шашки с Ромашкой</div>
+  <div class="sub">Часы для шашек с переключением ходов — и весёлыми заданиями</div>
+  <button class="bigbtn" id="btnStart">СТАРТ</button>
+  <div class="note">Первым ходит <b class="p1c">Игрок 1</b>. Сделал ход — тапни по своей половине.</div>
+</div>
+
+<!-- настройки -->
+<div id="settings" class="hidden">
+  <div class="panel">
+    <h2>Настройки</h2>
+    <div class="row">
+      <div><div class="lbl">Звук</div><div class="desc">Сигнал при смене хода и задании</div></div>
+      <div class="sw on" data-key="sound"><i></i></div>
+    </div>
+    <div class="row">
+      <div><div class="lbl">Вибрация</div><div class="desc">Короткий отклик на действия</div></div>
+      <div class="sw on" data-key="vibro"><i></i></div>
+    </div>
+    <div class="row">
+      <div><div class="lbl">Алкоголь</div><div class="desc">Выкл — мягкий режим, спорт и дурачества</div></div>
+      <div class="sw on" data-key="alco"><i></i></div>
+    </div>
+    <div class="row">
+      <div><div class="lbl">Частота заданий</div><div class="desc">Как часто выпадает подвох</div></div>
+      <div class="seg" id="freqSeg">
+        <button data-f="rare">Редко</button>
+        <button data-f="normal" class="sel">Норм</button>
+        <button data-f="often">Часто</button>
+      </div>
+    </div>
+  </div>
+  <button class="closebtn" id="btnCloseSettings">Готово</button>
+</div>
+
+<div class="rotateHint">📱 ↻<br>Поверни телефон горизонтально</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- хранилище настроек (с откатом в память, если localStorage недоступен) ----
+  var store = (function(){
+    try{ var k="__ss__"; localStorage.setItem(k,"1"); localStorage.removeItem(k);
+      return localStorage; }catch(e){ var m={};
+      return {getItem:function(k){return k in m?m[k]:null;}, setItem:function(k,v){m[k]=String(v);}}; }
+  })();
+  function load(k,d){ var v=store.getItem("ss_"+k); return v===null?d:v; }
+  function save(k,v){ try{ store.setItem("ss_"+k,v);}catch(e){} }
+
+  var settings = {
+    sound: load("sound","1")==="1",
+    vibro: load("vibro","1")==="1",
+    alco:  load("alco","1")==="1",
+    freq:  load("freq","normal")
+  };
+  var FREQ = { rare:0.15, normal:0.28, often:0.45 };
+
+  // ---- задания ----
+  var TASKS = [
+    {t:"Залуди бокальчик Короны", e:"🍺", c:"alco"},
+    {t:"Уничтожь рюмашку коньяку", e:"🥃", c:"alco"},
+    {t:"Налей, но не выпей", e:"🫗", c:"alco"},
+    {t:"Стаканчик водички за победу", e:"🥛", c:"fun"},
+    {t:"Открой свежую баночку", e:"🍻", c:"alco"},
+    {t:"Сделай 5 приседаний", e:"🏋️", c:"sport"},
+    {t:"2 отжимания", e:"💪", c:"sport"},
+    {t:"Планка 7 секунд", e:"🧱", c:"sport"},
+    {t:"Покажи кубики пресса", e:"😎", c:"fun"},
+    {t:"Пойди на диванчик на 1 минутку", e:"🛋️", c:"fun"},
+    {t:"Пойди покури", e:"🚬", c:"fun"},
+    {t:"Надо сходить подбросить дровишек в костёр", e:"🔥", c:"fun"},
+    {t:"Отправь фоточку Шурику", e:"📸", c:"fun"},
+    {t:"Сходи в гальюн", e:"🚽", c:"fun"},
+    {t:"Неси вкусняшку", e:"🍪", c:"fun"}
+  ];
+  var lastTaskIdx = -1;
+  function pickTask(){
+    var pool = TASKS.filter(function(x){ return settings.alco || x.c!=="alco"; });
+    if(!pool.length) return null;
+    var t, idx, guard=0;
+    do{ idx = Math.floor(Math.random()*pool.length); t = pool[idx]; guard++; }
+    while(pool.length>1 && t._gi===lastTaskIdx && guard<8);
+    t._gi = TASKS.indexOf(t); lastTaskIdx = t._gi;
+    return t;
+  }
+
+  // ---- состояние часов ----
+  var times = {1:0, 2:0};          // накопленное время, мс
+  var active = 0;                  // 0 = не начато/пауза, 1 или 2
+  var running = false;
+  var lastTs = 0;
+  var raf = null;
+
+  var t1=document.getElementById("t1"), t2=document.getElementById("t2");
+  var side1=document.getElementById("side1"), side2=document.getElementById("side2");
+
+  function fmt(ms){
+    var s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
+    function p(n){return n<10?"0"+n:""+n;}
+    return h>0 ? h+":"+p(m)+":"+p(ss) : p(m)+":"+p(ss);
+  }
+  function render(){
+    t1.textContent=fmt(times[1]); t2.textContent=fmt(times[2]);
+    side1.classList.toggle("active", active===1 && running);
+    side2.classList.toggle("active", active===2 && running);
+    side1.classList.toggle("inactive", active!==1 && active!==0);
+    side2.classList.toggle("inactive", active!==2 && active!==0);
+  }
+  function tick(ts){
+    if(running && active){
+      if(!lastTs) lastTs=ts;
+      times[active]+= ts-lastTs; lastTs=ts;
+      render();
+    }
+    raf=requestAnimationFrame(tick);
+  }
+
+  // ---- звук / вибро ----
+  var actx=null;
+  function beep(freq,dur){
+    if(!settings.sound) return;
+    try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      var o=actx.createOscillator(), g=actx.createGain();
+      o.frequency.value=freq; o.type="triangle"; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(.18,actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+dur);
+      o.start(); o.stop(actx.currentTime+dur);
+    }catch(e){}
+  }
+  function buzz(p){ if(settings.vibro && navigator.vibrate) try{navigator.vibrate(p);}catch(e){} }
+
+  // ---- wake lock ----
+  var wake=null;
+  async function getWake(){ try{ if("wakeLock" in navigator && running)
+    wake=await navigator.wakeLock.request("screen"); }catch(e){} }
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible" && running) getWake();
+  });
+
+  // ---- игровая логика ----
+  function startGame(){
+    if(active===0) active=1;
+    running=true; lastTs=0;
+    document.getElementById("btnPlay").textContent="⏸";
+    getWake();
+    if(actx && actx.state==="suspended") actx.resume();
+    render();
+  }
+  function pauseGame(){
+    running=false; lastTs=0;
+    document.getElementById("btnPlay").textContent="▶";
+    if(wake){ try{wake.release();}catch(e){} wake=null; }
+    render();
+  }
+  function resetGame(){
+    pauseGame(); times={1:0,2:0}; active=0;
+    document.getElementById("startOverlay").classList.remove("hidden");
+    hideTask(); render();
+  }
+  function pass(by){
+    // сменить ход; задание достаётся игроку, который ТОЛЬКО ЧТО походил (by)
+    if(!running || active!==by) return;
+    active = by===1?2:1; lastTs=0;
+    beep(by===1?660:520, .12); buzz(30);
+    render();
+    if(Math.random() < FREQ[settings.freq]) showTask(by);
+  }
+
+  // ---- попап задания ----
+  var taskWrap=document.getElementById("taskWrap");
+  function showTask(forP){
+    var task=pickTask(); if(!task) return;
+    document.getElementById("taskEmoji").textContent=task.e;
+    document.getElementById("taskText").textContent=task.t;
+    document.getElementById("taskFor").textContent="Задание для Игрока "+forP;
+    var card=document.getElementById("taskCard");
+    card.classList.remove("forP1","forP2"); card.classList.add(forP===1?"forP1":"forP2");
+    card.style.animation="none"; void card.offsetWidth; card.style.animation="";
+    taskWrap.classList.remove("hidden");
+    beep(880,.16); buzz([0,40,60,40]);
+  }
+  function hideTask(){ taskWrap.classList.add("hidden"); }
+
+  // ---- обработчики ----
+  function tap(p){
+    if(!running){ return; }          // до старта/на паузе половины не реагируют
+    if(active===p){ // активный игрок завершает ход
+      var el=p===1?side1:side2; el.classList.add("pressed");
+      setTimeout(function(){el.classList.remove("pressed");},120);
+      pass(p);
+    }
+  }
+  side1.addEventListener("click",function(){tap(1);});
+  side2.addEventListener("click",function(){tap(2);});
+
+  document.getElementById("btnStart").addEventListener("click",function(){
+    document.getElementById("startOverlay").classList.add("hidden");
+    // первый звук разблокирует аудио на мобильных
+    try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
+    startGame();
+    requestFS();
+  });
+  document.getElementById("btnPlay").addEventListener("click",function(){
+    if(active===0){ startGame(); return; }
+    running? pauseGame(): startGame();
+  });
+  document.getElementById("btnReset").addEventListener("click",resetGame);
+  document.getElementById("taskDone").addEventListener("click",function(){beep(740,.1);hideTask();});
+  document.getElementById("taskSkip").addEventListener("click",hideTask);
+
+  // ---- настройки ----
+  var settingsEl=document.getElementById("settings");
+  document.getElementById("btnGear").addEventListener("click",function(){
+    var was=running; if(was) pauseGame();
+    settingsEl.dataset.wasRunning = was?"1":"";
+    settingsEl.classList.remove("hidden");
+  });
+  document.getElementById("btnCloseSettings").addEventListener("click",function(){
+    settingsEl.classList.add("hidden");
+    if(settingsEl.dataset.wasRunning==="1" && active!==0) startGame();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".sw"),function(sw){
+    if(settings[sw.dataset.key]) sw.classList.add("on"); else sw.classList.remove("on");
+    sw.addEventListener("click",function(){
+      sw.classList.toggle("on");
+      var on=sw.classList.contains("on"); settings[sw.dataset.key]=on; save(sw.dataset.key,on?"1":"0");
+    });
+  });
+  var freqSeg=document.getElementById("freqSeg");
+  Array.prototype.forEach.call(freqSeg.children,function(b){
+    b.classList.toggle("sel", b.dataset.f===settings.freq);
+    b.addEventListener("click",function(){
+      Array.prototype.forEach.call(freqSeg.children,function(x){x.classList.remove("sel");});
+      b.classList.add("sel"); settings.freq=b.dataset.f; save("freq",b.dataset.f);
+    });
+  });
+
+  // ---- полноэкранный + блокировка ориентации ----
+  function requestFS(){
+    var el=document.documentElement;
+    var fn=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(fn){ try{ fn.call(el).then(function(){
+      if(screen.orientation && screen.orientation.lock)
+        screen.orientation.lock("landscape").catch(function(){});
+    }).catch(function(){}); }catch(e){} }
+  }
+
+  render();
+  raf=requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
